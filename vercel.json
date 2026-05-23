@@ -1,0 +1,7 @@
+{
+  "buildCommand": "echo 'build complete'",
+  "outputDirectory": ".",
+  "rewrites": [
+    { "source": "/:path*", "destination": "/index.html" }
+  ]
+}
