@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Whispr — Anonymous Messaging</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --pink: #FF4FA0;
+    --yellow: #FFD84D;
+    --purple: #7C3AED;
+    --cyan: #00D4FF;
+    --orange: #FF7043;
+    --green: #00E676;
+    --bg: #0D0D12;
+    --surface: #16161F;
+    --surface2: #1E1E2A;
+    --border: rgba(255,255,255,0.08);
+    --text: #F0F0FF;
+    --muted: rgba(240,240,255,0.45);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+  }
+
+  nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(13,13,18,0.85);
+  }
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800; font-size: 1.5rem;
+    background: linear-gradient(135deg, var(--pink), var(--yellow));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    cursor: pointer;
+  }
+  .nav-btns { display: flex; gap: 10px; }
+  .btn {
+    font-size: 0.875rem; font-weight: 500;
+    padding: 9px 20px; border-radius: 50px; cursor: pointer;
+    border: none; transition: all 0.2s;
+  }
+  .btn-ghost {
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { color: var(--text); }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--pink), var(--purple));
+    color: #fff; font-weight: 600;
+  }
+  .btn-primary:hover { transform: translateY(-1px); }
+  .btn-yellow {
+    background: var(--yellow); color: #0D0D12; font-weight: 700;
+  }
+
+  .page { display: none; min-height: 100vh; }
+  .page.active { display: flex; flex-direction: column; }
+
+  /* Hero */
+  .hero {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center; padding: 60px 24px;
+  }
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(2.5rem, 8vw, 5rem);
+    font-weight: 800; line-height: 1.05;
+    margin-bottom: 20px;
+  }
+  h1 span {
+    background: linear-gradient(135deg, var(--pink), var(--yellow));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hero-sub {
+    font-size: 1.1rem; color: var(--muted); max-width: 480px;
+    margin: 0 auto 40px; line-height: 1.7;
+  }
+  .hero-cta { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+    align-items: center; justify-content: center; padding: 24px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 18px; padding: 40px; width: 100%; max-width: 420px;
+    position: relative;
+  }
+  .modal h2 { font-family: 'Syne', sans-serif; font-size: 1.6rem; font-weight: 800; margin-bottom: 6px; }
+  .modal p { color: var(--muted); font-size: 0.9rem; margin-bottom: 28px; }
+  .modal-close { position: absolute; top: 16px; right: 20px; background: none; border: none; color: var(--muted); font-size: 1.4rem; cursor: pointer; }
+
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 0.8rem; font-weight: 500; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; }
+  .field input {
+    width: 100%; padding: 13px 16px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: 0.95rem;
+    outline: none; transition: border-color 0.2s;
+  }
+  .field input:focus { border-color: var(--pink); }
+  .modal .btn-primary { width: 100%; padding: 14px; font-size: 1rem; margin-top: 8px; }
+
+  /* Send Page */
+  .send-page {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 48px 24px;
+  }
+  .send-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 24px; padding: 40px; width: 100%; max-width: 520px;
+  }
+  .send-to {
+    display: flex; align-items: center; gap: 14px; margin-bottom: 32px;
+  }
+  .avatar {
+    width: 52px; height: 52px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Syne', sans-serif; font-size: 1.3rem; font-weight: 800;
+    flex-shrink: 0;
+  }
+  .send-to-info h3 { font-family: 'Syne', sans-serif; font-size: 1.1rem; font-weight: 700; }
+  .send-to-info p { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+
+  .msg-area {
+    width: 100%; min-height: 140px; resize: none;
+    background: var(--surface2); border: 2px solid var(--border);
+    border-radius: 10px; padding: 16px;
+    color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 1rem;
+    outline: none; transition: border-color 0.2s; line-height: 1.6;
+    margin-bottom: 16px;
+  }
+  .msg-area:focus { border-color: var(--pink); }
+
+  .char-count { font-size: 0.8rem; color: var(--muted); text-align: right; margin-bottom: 16px; }
+  .reaction-row {
+    display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;
+  }
+  .reaction-label { font-size: 0.75rem; color: var(--muted); width: 100%; margin-bottom: 2px; text-transform: uppercase; }
+  .react-btn {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 50px; padding: 7px 14px; font-size: 1rem;
+    cursor: pointer; transition: all 0.15s; color: var(--text);
+  }
+  .react-btn.picked { background: rgba(255,79,160,0.15); border-color: var(--pink); transform: scale(1.1); }
+
+  .anon-badge {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(0,230,118,0.08); border: 1px solid rgba(0,230,118,0.2);
+    border-radius: 50px; padding: 8px 16px; font-size: 0.8rem;
+    color: var(--green); margin-bottom: 20px;
+  }
+
+  .success-banner { display: none; text-align: center; padding: 32px; }
+  .success-banner.show { display: block; }
+  .success-banner .big-emoji { font-size: 4rem; margin-bottom: 16px; }
+  .success-banner h3 { font-family: 'Syne', sans-serif; font-size: 1.5rem; font-weight: 800; margin-bottom: 8px; }
+
+  /* Inbox */
+  .inbox-page { flex: 1; padding: 32px 24px; max-width: 700px; margin: 0 auto; width: 100%; }
+  .inbox-header { margin-bottom: 24px; }
+  .inbox-header h2 { font-family: 'Syne', sans-serif; font-size: 1.8rem; font-weight: 800; }
+  .inbox-header p { font-size: 0.875rem; color: var(--muted); margin-top: 4px; }
+
+  .share-box {
+    background: linear-gradient(135deg, rgba(255,79,160,0.1), rgba(124,58,237,0.1));
+    border: 1px solid rgba(255,79,160,0.2);
+    border-radius: 18px; padding: 20px 24px;
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 28px; flex-wrap: wrap;
+  }
+  .share-box-info { flex: 1; min-width: 200px; }
+  .share-box-info h4 { font-family: 'Syne', sans-serif; font-size: 0.95rem; font-weight: 700; margin-bottom: 4px; }
+  .share-link { font-size: 0.8rem; color: var(--pink); background: rgba(255,79,160,0.1); border-radius: 6px; padding: 4px 10px; display: inline-block; }
+
+  .msg-list { display: flex; flex-direction: column; gap: 14px; }
+  .msg-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 18px; padding: 22px 24px;
+    transition: border-color 0.2s;
+  }
+  .msg-card.unread { border-left: 3px solid var(--pink); }
+  .msg-meta {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+  }
+  .anon-avatar {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; flex-shrink: 0;
+  }
+  .msg-from { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+  .msg-time { font-size: 0.75rem; color: rgba(240,240,255,0.25); margin-left: auto; }
+  .msg-body { font-size: 0.975rem; line-height: 1.7; color: var(--text); margin-bottom: 14px; }
+  .msg-reaction { font-size: 1.2rem; margin-bottom: 10px; }
+
+  .msg-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .action-btn {
+    padding: 7px 14px; border-radius: 50px; font-size: 0.8rem;
+    font-weight: 500; cursor: pointer; border: 1px solid var(--border);
+    background: transparent; color: var(--muted); transition: all 0.2s;
+  }
+  .action-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+
+  .empty-state { text-align: center; padding: 80px 24px; color: var(--muted); }
+  .empty-state .big { font-size: 4rem; margin-bottom: 16px; }
+  .empty-state h3 { font-family: 'Syne', sans-serif; font-size: 1.2rem; margin-bottom: 8px; color: var(--text); }
+
+  .alert { padding: 12px 16px; border-radius: 10px; font-size: 0.875rem; margin-bottom: 16px; }
+  .alert-error { background: rgba(255,85,85,0.1); color: #ff5555; border: 1px solid rgba(255,85,85,0.2); }
+  .alert-success { background: rgba(0,230,118,0.1); color: var(--green); border: 1px solid rgba(0,230,118,0.2); }
+
+  .tabs { display: flex; background: var(--surface2); border-radius: 10px; padding: 4px; margin-bottom: 24px; }
+  .tab { flex: 1; padding: 8px; text-align: center; font-size: 0.875rem; font-weight: 500;
+    cursor: pointer; border-radius: 8px; color: var(--muted); transition: all 0.2s; }
+  .tab.active { background: var(--surface); color: var(--text); }
+
+  .reply-area { display: none; margin-top: 14px; border-top: 1px solid var(--border); padding-top: 14px; }
+  .reply-area.open { display: block; }
+  .reply-input {
+    width: 100%; padding: 10px 14px; min-height: 70px; resize: none;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: 0.9rem;
+    outline: none; margin-bottom: 10px;
+  }
+  .reply-input:focus { border-color: var(--cyan); }
+</style>
+</head>
+<body>
+
+<!-- LANDING PAGE -->
+<div id="page-landing" class="page active">
+  <nav>
+    <span class="logo" onclick="showPage('landing')">whispr</span>
+    <div class="nav-btns">
+      <button class="btn btn-ghost" onclick="openAuth('login')">Log in</button>
+      <button class="btn btn-primary" onclick="openAuth('signup')">Get started</button>
+    </div>
+  </nav>
+  <div class="hero">
+    <div style="display: inline-flex; align-items: center; gap: 8px; background: rgba(255,79,160,0.12); border: 1px solid rgba(255,79,160,0.25); border-radius: 50px; padding: 6px 16px; font-size: 0.8rem; font-weight: 500; color: var(--pink); margin-bottom: 28px;">
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: var(--green); display: inline-block;"></span>
+      100% anonymous, always
+    </div>
+    <h1>Say it without<br/><span>saying who you are</span></h1>
+    <p class="hero-sub">Get honest messages, wild confessions, and real talk — all anonymously sent to your personal Whispr link.</p>
+    <div class="hero-cta">
+      <button class="btn btn-primary" style="padding:14px 32px;font-size:1rem;" onclick="openAuth('signup')">Create my link</button>
+    </div>
+  </div>
+</div>
+
+<!-- SEND PAGE -->
+<div id="page-send" class="page">
+  <nav>
+    <span class="logo" onclick="showPage('landing')">whispr</span>
+    <div class="nav-btns">
+      <button class="btn btn-ghost" onclick="openAuth('login')">Log in</button>
+      <button class="btn btn-primary" onclick="openAuth('signup')">Get my link</button>
+    </div>
+  </nav>
+  <div class="send-page">
+    <div class="send-card">
+      <div id="send-card-inner">
+        <div class="send-to">
+          <div class="avatar" id="send-avatar" style="background: linear-gradient(135deg,#FF4FA0,#7C3AED);">😊</div>
+          <div class="send-to-info">
+            <h3 id="send-username">@yourname</h3>
+            <p>Send an anonymous message</p>
+          </div>
+        </div>
+        <textarea class="msg-area" id="msg-text" placeholder="Say anything... they won't know it's you 👀" maxlength="300" oninput="updateCount()"></textarea>
+        <div class="char-count" id="char-count">0 / 300</div>
+        <div class="reaction-row">
+          <span class="reaction-label">Add a vibe</span>
+          <button class="react-btn" onclick="pickReact(this)">🔥</button>
+          <button class="react-btn" onclick="pickReact(this)">💀</button>
+          <button class="react-btn" onclick="pickReact(this)">💘</button>
+          <button class="react-btn" onclick="pickReact(this)">👀</button>
+          <button class="react-btn" onclick="pickReact(this)">🤣</button>
+          <button class="react-btn" onclick="pickReact(this)">😭</button>
+          <button class="react-btn" onclick="pickReact(this)">✨</button>
+          <button class="react-btn" onclick="pickReact(this)">🎯</button>
+        </div>
+        <div class="anon-badge">🛡️ Your identity is completely hidden</div>
+        <button class="btn btn-primary" style="width:100%;padding:15px;font-size:1rem;" onclick="sendMsg()">Send anonymously</button>
+      </div>
+      <div id="success-banner" class="success-banner">
+        <div class="big-emoji">🎉</div>
+        <h3>Whispr sent!</h3>
+        <p>They'll see your message — but never who sent it.</p>
+        <br/>
+        <button class="btn btn-yellow" style="width:100%;margin-top:8px;" onclick="resetSend()">Send another</button>
+        <br/><br/>
+        <button class="btn btn-ghost" style="width:100%;margin-top:4px;" onclick="openAuth('signup')">Get my own Whispr link</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- INBOX PAGE -->
+<div id="page-inbox" class="page">
+  <nav>
+    <span class="logo" onclick="showPage('landing')">whispr</span>
+    <div class="nav-btns">
+      <div id="user-display" style="font-size:0.875rem;color:var(--muted);padding:0 12px;"></div>
+      <button class="btn btn-ghost" onclick="logout()">Log out</button>
+    </div>
+  </nav>
+  <div class="inbox-page">
+    <div class="inbox-header">
+      <h2>Your inbox 📬</h2>
+      <p>Anonymous messages sent to you</p>
+    </div>
+    <div class="share-box">
+      <div class="share-box-info">
+        <h4>Your Whispr link</h4>
+        <span class="share-link" id="my-link-display">whispr.app/you</span>
+      </div>
+      <button class="btn btn-primary" onclick="copyMyLink()" style="padding:10px 20px;">Copy link 🔗</button>
+    </div>
+    <div id="msg-list" class="msg-list"></div>
+  </div>
+</div>
+
+<!-- AUTH MODAL -->
+<div id="auth-modal" class="modal-overlay" onclick="closeAuthOutside(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeAuth()">✕</button>
+    <h2 id="auth-title">Join Whispr</h2>
+    <p id="auth-sub">Create your free anonymous messaging link</p>
+    <div class="tabs">
+      <div class="tab active" id="tab-signup" onclick="switchTab('signup')">Sign up</div>
+      <div class="tab" id="tab-login" onclick="switchTab('login')">Log in</div>
+    </div>
+    <div id="signup-fields">
+      <div class="field">
+        <label>Username</label>
+        <input type="text" id="reg-name" placeholder="e.g. alex" />
+      </div>
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="reg-email" placeholder="you@email.com" />
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="reg-pass" placeholder="••••••••" />
+    </div>
+    <div id="auth-error" class="alert alert-error" style="display:none;"></div>
+    <button class="btn btn-primary" style="width:100%;padding:14px;font-size:1rem;" id="auth-submit-btn" onclick="submitAuth()">Create my Whispr link</button>
+  </div>
+</div>
+
+<script>
+// ===== CONFIGURATION =====
+// REPLACE THESE WITH YOUR ACTUAL SUPABASE KEYS
+const SUPABASE_URL = 'https://vxqipbohlnfkgwdyruqd.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4cWlwYm9obG5ma2d3ZHlydXFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1MzIwNzcsImV4cCI6MjA5NTEwODA3N30.O2zX1hyKezLIRbMNUx6t04m3IGstAWY0HDakFnSxxSY';
+
+// ===== STATE =====
+let sbClient;
+let currentUser = null;
+let currentMode = 'signup';
+let selectedReaction = '';
+
+// ===== INITIALIZE SUPABASE =====
+function initSupabase() {
+  try {
+    sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log('✅ Supabase connected');
+  } catch (e) {
+    console.error('❌ Supabase init failed:', e.message);
+    alert('Error: Supabase keys not set correctly. Check the HTML file.');
+  }
+}
+
+// ===== PAGE NAVIGATION =====
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+// ===== AUTH MODAL =====
+function openAuth(mode) {
+  currentMode = mode;
+  switchTab(mode);
+  document.getElementById('auth-modal').classList.add('open');
+}
+
+function closeAuth() {
+  document.getElementById('auth-modal').classList.remove('open');
+  document.getElementById('auth-error').style.display = 'none';
+}
+
+function closeAuthOutside(e) {
+  if (e.target.id === 'auth-modal') closeAuth();
+}
+
+function switchTab(mode) {
+  currentMode = mode;
+  document.getElementById('tab-signup').classList.toggle('active', mode === 'signup');
+  document.getElementById('tab-login').classList.toggle('active', mode === 'login');
+  document.getElementById('signup-fields').style.display = mode === 'signup' ? 'block' : 'none';
+  document.getElementById('auth-title').textContent = mode === 'signup' ? 'Join Whispr' : 'Welcome back';
+  document.getElementById('auth-sub').textContent = mode === 'signup' ? 'Create your free anonymous messaging link' : 'Log in to see your messages';
+  document.getElementById('auth-submit-btn').textContent = mode === 'signup' ? 'Create my Whispr link' : 'Log in';
+}
+
+// ===== AUTH FUNCTIONS =====
+async function submitAuth() {
+  const email = document.getElementById('reg-email').value.trim();
+  const pass = document.getElementById('reg-pass').value;
+  const errorEl = document.getElementById('auth-error');
+
+  if (!email || !pass) {
+    showError('Please fill in all fields');
+    return;
+  }
+
+  let username;
+  if (currentMode === 'signup') {
+    const raw = document.getElementById('reg-name').value.trim();
+    if (!raw) {
+      showError('Enter a username');
+      return;
+    }
+    username = raw.replace(/^@/, '').replace(/\s+/g, '_').toLowerCase();
+  }
+
+  try {
+    if (currentMode === 'signup') {
+      const { data, error } = await sbClient.auth.signUp({ email, password: pass });
+      if (error) throw error;
+
+      await sbClient.from('profiles').insert({
+        id: data.user.id,
+        username: username,
+        email: email
+      });
+    } else {
+      const { error } = await sbClient.auth.signInWithPassword({ email, password: pass });
+      if (error) throw error;
+    }
+
+    const { data: { user } } = await sbClient.auth.getUser();
+    currentUser = user;
+    closeAuth();
+    loadInbox();
+    showPage('inbox');
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+function showError(msg) {
+  const errorEl = document.getElementById('auth-error');
+  errorEl.textContent = msg;
+  errorEl.style.display = 'block';
+}
+
+function logout() {
+  sbClient.auth.signOut();
+  currentUser = null;
+  showPage('landing');
+}
+
+// ===== INBOX =====
+async function loadInbox() {
+  if (!currentUser) return;
+
+  try {
+    const { data: profile } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single();
+    document.getElementById('user-display').textContent = '@' + profile.username;
+    document.getElementById('my-link-display').textContent = window.location.href.split('?')[0].split('#')[0] + profile.username;
+
+    const { data: messages } = await sbClient.from('messages').select('*').eq('recipient_id', currentUser.id).order('created_at', { ascending: false });
+
+    renderMessages(messages || []);
+  } catch (err) {
+    console.error('Error loading inbox:', err);
+  }
+}
+
+function renderMessages(messages) {
+  const list = document.getElementById('msg-list');
+  
+  if (!messages || messages.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="big">📭</div><h3>No messages yet</h3><p>Share your link to start receiving anonymous whisprs</p></div>';
+    return;
+  }
+
+  const colors = [['#FF4FA0','#7C3AED'],['#FFD84D','#FF7043'],['#00D4FF','#7C3AED'],['#00E676','#00D4FF'],['#FF7043','#FF4FA0']];
+  list.innerHTML = messages.map((m, i) => {
+    const grad = `linear-gradient(135deg,${colors[i % colors.length].join(',')})`;
+    return `
+    <div class="msg-card">
+      <div class="msg-meta">
+        <div class="anon-avatar" style="background:${grad}">👤</div>
+        <span class="msg-from">Anonymous</span>
+        <span class="msg-time">${new Date(m.created_at).toLocaleDateString()}</span>
+      </div>
+      ${m.reaction ? `<div class="msg-reaction">${m.reaction}</div>` : ''}
+      <div class="msg-body">${escapeHtml(m.text)}</div>
+      <div class="msg-actions">
+        <button class="action-btn" onclick="deleteMsg(${m.id})">🗑 Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+async function deleteMsg(id) {
+  await sbClient.from('messages').delete().eq('id', id);
+  loadInbox();
+}
+
+function copyMyLink() {
+  const link = document.getElementById('my-link-display').textContent;
+  navigator.clipboard?.writeText(link).then(() => alert('Link copied! 🔗'));
+}
+
+// ===== SEND PAGE =====
+function setupSendPage(username) {
+  document.getElementById('send-username').textContent = '@' + username;
+  document.getElementById('msg-text').value = '';
+  selectedReaction = '';
+  document.querySelectorAll('.react-btn').forEach(b => b.classList.remove('picked'));
+  document.getElementById('send-card-inner').style.display = 'block';
+  document.getElementById('success-banner').classList.remove('show');
+  updateCount();
+}
+
+function updateCount() {
+  const ta = document.getElementById('msg-text');
+  document.getElementById('char-count').textContent = ta.value.length + ' / 300';
+}
+
+function pickReact(btn) {
+  document.querySelectorAll('.react-btn').forEach(b => b.classList.remove('picked'));
+  if (selectedReaction === btn.textContent) { 
+    selectedReaction = ''; 
+    return; 
+  }
+  btn.classList.add('picked');
+  selectedReaction = btn.textContent;
+}
+
+async function sendMsg() {
+  const txt = document.getElementById('msg-text').value.trim();
+  if (!txt) {
+    alert('Message is empty');
+    return;
+  }
+
+  const username = document.getElementById('send-username').textContent.replace('@', '');
+  const { data: recipient, error: findErr } = await sbClient.from('profiles').select('*').eq('username', username).single();
+
+  if (findErr || !recipient) {
+    alert('User not found');
+    return;
+  }
+
+  const { error: sendErr } = await sbClient.from('messages').insert({
+    recipient_id: recipient.id,
+    text: txt,
+    reaction: selectedReaction || null
+  });
+
+  if (sendErr) {
+    alert('Failed to send: ' + sendErr.message);
+    return;
+  }
+
+  document.getElementById('send-card-inner').style.display = 'none';
+  document.getElementById('success-banner').classList.add('show');
+}
+
+function resetSend() {
+  const username = document.getElementById('send-username').textContent.replace('@', '');
+  setupSendPage(username);
+}
+
+// ===== INITIALIZATION =====
+window.addEventListener('load', async () => {
+  // Initialize Supabase
+  initSupabase();
+
+  // Check auth status
+  const { data: { user } } = await sbClient.auth.getUser();
+  
+  if (user) {
+    // User is logged in
+    currentUser = user;
+    loadInbox();
+    showPage('inbox');
+  } else {
+    // Check if accessing a user's send page
+    const path = window.location.pathname.slice(1).split('/')[0];
+    if (path && path !== 'index.html' && path.length > 0) {
+      setupSendPage(path);
+      showPage('send');
+    } else {
+      showPage('landing');
+    }
+  }
+});
+</script>
+</body>
+</html>
